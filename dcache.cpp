@@ -1,13 +1,13 @@
 /*BEGIN_LEGAL
 Intel Open Source License
 
-Copyright (c) 2002-2012 Intel Corporation. All rights reserved.
+Copyright (c) 2002-2018 Intel Corporation. All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are
 met:
 
-Redist ributions of source code must retain the above copyright notice,
+Redistributions of source code must retain the above copyright notice,
 this list of conditions and the following disclaimer.  Redistributions
 in binary form must reproduce the above copyright notice, this list of
 conditions and the following disclaimer in the documentation and/or
@@ -19,7 +19,7 @@ specific prior written permission.
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
 ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
 LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE INTEL OR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO  EVENT SHALL THE INTEL OR
 ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
 SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
 LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
@@ -28,11 +28,6 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 END_LEGAL */
-//
-// @ORIGINAL_AUTHOR: Artur Klauser
-// @EXTENDED: Rodric Rabbah (rodric@gmail.com)
-//
-
 /*! @file
  *  This file contains an ISA-portable cache simulator
  *  data cache hierarchies
@@ -44,11 +39,12 @@ END_LEGAL */
 #include <iostream>
 #include <fstream>
 
-#include "dcache.H"
+#include "dcache.h"
 #include "pin_profile.H"
 
+
 std::ofstream outFile;
-VOID Fini(int code, VOID * v);
+
 /* ===================================================================== */
 /* Commandline Switches */
 /* ===================================================================== */
@@ -88,9 +84,10 @@ INT32 Usage()
 /* Global Variables */
 /* ===================================================================== */
 
-// wrap configuation constants into their own name space to avoid name clashes
 
-#define WARMUP 40000000000
+//const long long int WARMUP = 40000000000;
+
+// wrap configuation constants into their own name space to avoid name clashes
 namespace DL1
 {
     const UINT32 max_sets = 8*KILO; // cacheSize / (lineSize * associativity);
@@ -103,7 +100,6 @@ namespace DL1
 
 DL1::CACHE*  dl1 = NULL;
 DL1::CACHE*  l2  = NULL;
-//DL1::CACHE*  l3  = NULL;
 
 typedef enum
 {
@@ -117,83 +113,37 @@ typedef enum
 typedef  COUNTER_ARRAY<UINT64, COUNTER_NUM> COUNTER_HIT_MISS;
 
 
-// holds the counters with misses and hits
-// conceptually this is an array indexed by instruction address
-COMPRESSOR_COUNTER<ADDRINT, UINT32, COUNTER_HIT_MISS> profile;
-
-/* ===================================================================== */
-
 VOID docount()
 {
     ins_count++;
     if( ( (ins_count%EPOCH)==0 ) & (ins_count>WARMUP) )
     {
-        cerr << "$$$$ " << ins_count << flush << endl;
+        cerr << "$$$$ " << ins_count << " memory access = "
+                                        << mem_count_before_warmup<< " memory access = " << mem_count_after_warmup << flush << endl;
         cerr.flush();
-      //  mainMemory->PrintStat();
-      //  mainMemory->resetCounter();
+
+        //  mainMemory->PrintStat();
+        //  mainMemory->resetCounter();
     }
-   /* if(ins_count>= 100000000000)
-    {
-
-
-        outFile << "PIN:MEMLATENCIES 1.0. 0x0\n";
-
-        outFile <<
-                "#\n"
-                "# DCACHE stats\n"
-                "#\n";
-
-        outFile << dl1->StatsLong("# ", CACHE_BASE::CACHE_TYPE_DCACHE);
-
-        if( KnobTrackLoads || KnobTrackStores ) {
-            outFile <<
-                    "#\n"
-                    "# LOAD stats\n"
-                    "#\n";
-            outFile << profile.StringLong();
-        }
-
-        outFile << l2->StatsLong("# ", CACHE_BASE::CACHE_TYPE_DCACHE);
-
-        if( KnobTrackLoads || KnobTrackStores ) {
-            outFile <<
-                    "#\n"
-                    "# LOAD stats\n"
-                    "#\n";
-
-            outFile << profile.StringLong();
-        }
-
-        outFile << l3->StatsLong("# ", CACHE_BASE::CACHE_TYPE_DCACHE);
-
-        if( KnobTrackLoads || KnobTrackStores ) {
-            outFile <<
-                    "#\n"
-                    "# LOAD   stats\n"
-                    "#\n";
-
-            outFile << profile.StringLong();
-        }
-        outFile.close();
-        //Fini(0,0);
-        cout << "cycle:" << ins_count << endl;
-        char c;
-        cin.get(c);
-    }*/
+    if (mem_count_after_warmup > 4000000000)
+            PIN_ExitApplication(0);
 
 }
 
+
+// holds the counters with misses and hits
+// conceptually this is an array indexed by instruction address
+COMPRESSOR_COUNTER<ADDRINT, UINT32, COUNTER_HIT_MISS> profile;
+
+/* ===================================================================== */
+ 
 VOID LoadMulti(ADDRINT addr, UINT32 size, UINT32 instId)
 {
     // first level D-cache
-    if(ins_count>WARMUP)
-    {
-        const BOOL dl1Hit = dl1->Access(addr, size, ACCESS_TYPE_LOAD);
+    const BOOL dl1Hit = dl1->Access(addr, size, /*CACHE_BASE::*/ACCESS_TYPE_LOAD);
 
-        const COUNTER counter = dl1Hit ? COUNTER_HIT : COUNTER_MISS;
-        profile[instId][counter]++;
-    }
+    const COUNTER counter = dl1Hit ? COUNTER_HIT : COUNTER_MISS;
+    profile[instId][counter]++;
 }
 
 /* ===================================================================== */
@@ -201,13 +151,10 @@ VOID LoadMulti(ADDRINT addr, UINT32 size, UINT32 instId)
 VOID StoreMulti(ADDRINT addr, UINT32 size, UINT32 instId)
 {
     // first level D-cache
-    if(ins_count>WARMUP)
-    {
-        const BOOL dl1Hit = dl1->Access(addr, size, ACCESS_TYPE_STORE);
+    const BOOL dl1Hit = dl1->Access(addr, size, /*CACHE_BASE::*/ACCESS_TYPE_STORE);
 
-        const COUNTER counter = dl1Hit ? COUNTER_HIT : COUNTER_MISS;
-        profile[instId][counter]++;
-    }
+    const COUNTER counter = dl1Hit ? COUNTER_HIT : COUNTER_MISS;
+    profile[instId][counter]++;
 }
 
 /* ===================================================================== */
@@ -216,13 +163,10 @@ VOID LoadSingle(ADDRINT addr, UINT32 instId)
 {
     // @todo we may access several cache lines for
     // first level D-cache
-    if(ins_count>WARMUP)
-    {
-        const BOOL dl1Hit = dl1->AccessSingleLine(addr, ACCESS_TYPE_LOAD);
+    const BOOL dl1Hit = dl1->AccessSingleLine(addr, /*CACHE_BASE::*/ACCESS_TYPE_LOAD);
 
-        const COUNTER counter = dl1Hit ? COUNTER_HIT : COUNTER_MISS;
-        profile[instId][counter]++;
-    }
+    const COUNTER counter = dl1Hit ? COUNTER_HIT : COUNTER_MISS;
+    profile[instId][counter]++;
 }
 /* ===================================================================== */
 
@@ -230,45 +174,38 @@ VOID StoreSingle(ADDRINT addr, UINT32 instId)
 {
     // @todo we may access several cache lines for
     // first level D-cache
-    if(ins_count>WARMUP)
-    {
-        const BOOL dl1Hit = dl1->AccessSingleLine(addr, ACCESS_TYPE_STORE);
+    const BOOL dl1Hit = dl1->AccessSingleLine(addr, /*CACHE_BASE::*/ACCESS_TYPE_STORE);
 
-        const COUNTER counter = dl1Hit ? COUNTER_HIT : COUNTER_MISS;
-        profile[instId][counter]++;
-    }
+    const COUNTER counter = dl1Hit ? COUNTER_HIT : COUNTER_MISS;
+    profile[instId][counter]++;
 }
 
 /* ===================================================================== */
 
 VOID LoadMultiFast(ADDRINT addr, UINT32 size)
 {
-    if(ins_count>WARMUP)
-        dl1->Access(addr, size, ACCESS_TYPE_LOAD);
+    dl1->Access(addr, size, /*CACHE_BASE::*/ACCESS_TYPE_LOAD);
 }
 
 /* ===================================================================== */
 
 VOID StoreMultiFast(ADDRINT addr, UINT32 size)
 {
-    if(ins_count>WARMUP)
-        dl1->Access(addr, size, ACCESS_TYPE_STORE);
+    dl1->Access(addr, size, /*CACHE_BASE::*/ACCESS_TYPE_STORE);
 }
 
 /* ===================================================================== */
 
 VOID LoadSingleFast(ADDRINT addr)
 {
-    if(ins_count>WARMUP)
-        dl1->AccessSingleLine(addr, ACCESS_TYPE_LOAD);
+    dl1->AccessSingleLine(addr, /*CACHE_BASE::*/ACCESS_TYPE_LOAD);
 }
 
 /* ===================================================================== */
 
 VOID StoreSingleFast(ADDRINT addr)
 {
-    if(ins_count>WARMUP)
-        dl1->AccessSingleLine(addr, ACCESS_TYPE_STORE);
+    dl1->AccessSingleLine(addr, /*CACHE_BASE::*/ACCESS_TYPE_STORE);
 }
 
 
@@ -277,15 +214,10 @@ VOID StoreSingleFast(ADDRINT addr)
 
 VOID Instruction(INS ins, void * v)
 {
-    //if (mem_count > 1000000000)
-    //    PIN_ExitThread(-1);
 
     INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR)docount, IARG_END);
 
-    //if(ins_count%1000000==0)
-    //cerr << "ins_addr: " << INS_Address(ins) << endl;
-
-    if (INS_IsMemoryRead(ins))
+    if (INS_IsMemoryRead(ins) && INS_IsStandardMemop(ins))
     {
         // map sparse INS addresses to dense IDs
         const ADDRINT iaddr = INS_Address(ins);
@@ -336,7 +268,7 @@ VOID Instruction(INS ins, void * v)
         }
     }
 
-    if ( INS_IsMemoryWrite(ins) )
+    if ( INS_IsMemoryWrite(ins) && INS_IsStandardMemop(ins))
     {
         // map sparse INS addresses to dense IDs
         const ADDRINT iaddr = INS_Address(ins);
@@ -388,18 +320,16 @@ VOID Instruction(INS ins, void * v)
         }
 
     }
-
 }
 
-/* ================ ====== =============================================== */
+/* ===================================================================== */
 
 VOID Fini(int code, VOID * v)
 {
     // print D-cache profile
     // @todo what does this print
-     cerr <<  "Count " << ins_count  << " mem count before warmup = "
-                                       << mem_count_before_warmup << " mem count after warm up = " << mem_count<< endl;
 
+    cout <<"trace is done\n";
 
     outFile << "PIN:MEMLATENCIES 1.0. 0x0\n";
 
@@ -418,30 +348,9 @@ VOID Fini(int code, VOID * v)
 
         outFile << profile.StringLong();
     }
-
-    outFile << l2->StatsLong("# ", CACHE_BASE::CACHE_TYPE_DCACHE);
-
-    if( KnobTrackLoads || KnobTrackStores ) {
-        outFile <<
-                "#\n"
-                "# LOAD stats\n"
-                "#\n";
-
-        outFile << profile.StringLong();
-    }
-
-    //outFile << l3->StatsLong("# ", CACHE_BASE::CACHE_TYPE_DCACHE);
-
-    if( KnobTrackLoads || KnobTrackStores ) {
-        outFile <<
-                "#\n"
-                "# LOAD stats\n"
-                "#\n";
-
-        outFile << profile.StringLong();
-    }
     outFile.close();
-
+    fprintf(my_file, "#eof\n");
+    fclose(my_file);
 }
 
 /* ===================================================================== */
@@ -450,7 +359,14 @@ VOID Fini(int code, VOID * v)
 
 int main(int argc, char *argv[])
 {
+
+
+    //myfile.open();
     PIN_InitSymbols();
+
+
+    my_file = fopen("my_trace.out", "w");
+
 
     if( PIN_Init(argc,argv) )
     {
@@ -459,16 +375,19 @@ int main(int argc, char *argv[])
 
     outFile.open(KnobOutputFile.Value().c_str());
 
+    //dl1 = new DL1::CACHE("L1 Data Cache",
+    //                     KnobCacheSize.Value() * KILO,
+    //                     KnobLineSize.Value(),
+    //                     KnobAssociativity.Value());
+
     dl1 = new DL1::CACHE("L1 ",  32*KILO, 64, 4,1,4); //(KnobCacheSize.Value() * KILO,KnobLineSize.Value(),KnobAssociativity.Value());
     l2  = new DL1::CACHE("L2 ", 1024 * KILO, 64, 8,4,150);
-    //l3  = new DL1::CACHE("L3 ", 2048 * KILO, 64, 8,0,0);
-    mainMemory = new Memory();
-    dl1->setNextLevel(l2);
-    l2->setNextLevel(NULL); ///l2->setNextLevel(l3);
-    //l3->setNextLevel(NULL);
 
-    profile.SetKeyName("iaddr         ");
-    profile.SetCounterName("dcache:miss      dcache:hit");
+    dl1->setNextLevel(l2);
+    l2->setNextLevel(NULL);
+
+    profile.SetKeyName("iaddr          ");
+    profile.SetCounterName("dcache:miss        dcache:hit");
 
     COUNTER_HIT_MISS threshold;
 
